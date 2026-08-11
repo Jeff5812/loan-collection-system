@@ -1,0 +1,1598 @@
+{
+  "name": "MICRO-LENDING COLLECTION, RESTRUCTURING AND LEGAL ROUTER",
+  "nodes": [
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Analyze this delinquent loan account and return ONLY a JSON object, no prose, no markdown fences.\n\nAccount data:\nCustomer: {{ $json.customer_name }}\nDays past due: {{ $json.days_past_due }}\nPrincipal balance: {{ $json.principal_balance }}\nLast payment date: {{ $json.last_payment_date }}\nLast payment amount: {{ $json.last_payment_amount }}\nMessage history: {{ $json.message_history }}\n\nReturn this exact JSON shape:\n{\n  \"risk_tier\": \"low\" | \"medium\" | \"high\",\n  \"sentiment_score\": number between -1 and 1,\n  \"confidence\": number between 0 and 1,\n  \"rationale\": \"one sentence explanation\"\n}\n\nGuidance: low = usually pays, isolated lateness, engages positively. medium = struggling but responsive/engaging. high = non-responsive, repeat default, or hostile/no engagement.",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "You are a credit risk and sentiment analyst for a consumer lending platform. You classify delinquent accounts into a risk tier and sentiment score based on payment history and communication tone. You always respond with valid JSON only."
+        }
+      },
+      "id": "00ad70cb-0e6d-4b16-8e52-c39332c7921c",
+      "name": "Risk & Sentiment Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [
+        -1632,
+        1024
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const parsed = $json.output;\nconst validTiers = ['low', 'medium', 'high'];\n\nif (!validTiers.includes(parsed.risk_tier)) {\n  parsed.risk_tier = 'review';\n  parsed.confidence = 0;\n  parsed.rationale = (parsed.rationale || '') + ' [invalid risk_tier defaulted to review]';\n}\n\nif (parsed.risk_tier === 'medium' && parsed.sentiment_score < -0.3) {\n  parsed.risk_tier = 'high';\n  parsed.rationale += ' [escalated to high: negative sentiment override]';\n}\n\nreturn {\n  json: {\n    ...$('Loop Accounts').item.json,\n    ...parsed\n  }\n};"
+      },
+      "id": "85b0a0c8-a56c-40ac-9021-0b77815f35d8",
+      "name": "Parse AI Output",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1328,
+        1024
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.confidence }}",
+              "rightValue": 0.6,
+              "operator": {
+                "type": "number",
+                "operation": "gte"
+              },
+              "id": "26ad9378-5ee6-4653-ab00-b8291d7b41fe"
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "fa807e00-6182-4abe-81f6-70f294e510f3",
+      "name": "Confidence Check",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -1136,
+        1024
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "1",
+              "name": "action_taken",
+              "value": "human_review_queue",
+              "type": "string"
+            },
+            {
+              "id": "2",
+              "name": "status",
+              "value": "pending_review",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "438c3d6f-7f1f-40dc-a33d-baec03a55c95",
+      "name": "Flag for Human Review",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -912,
+        1264
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.risk_tier }}",
+                    "rightValue": "low",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "d3b1e1c2-e821-43e9-8cef-1822405968ed"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "LOW"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.risk_tier }}",
+                    "rightValue": "medium",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "9debb631-08b8-4ae0-afe9-330f427d481b"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "MEDIUM"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.risk_tier }}",
+                    "rightValue": "high",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "2075119b-7148-40b0-a0d0-d1309a89634f"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "HIGH"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "id": "e1788e15-e77e-4f8a-8063-db0ea11402de",
+      "name": "Route by Risk Tier",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        -928,
+        976
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const a = $json;\nconst legal_package = {\n  account_id: a.account_id,\n  customer_name: a.customer_name,\n  principal_balance: a.principal_balance,\n  days_past_due: a.days_past_due,\n  last_payment_date: a.last_payment_date,\n  last_payment_amount: a.last_payment_amount,\n  ai_rationale: a.rationale,\n  sentiment_score: a.sentiment_score,\n  referral_date: new Date().toISOString()\n};\n\nconst html_report = `\n<div style=\"font-family: Arial, sans-serif; max-width: 600px; margin: auto; color: #1a1a1a;\">\n  <h2 style=\"border-bottom: 2px solid #b91c1c; padding-bottom: 8px; color: #b91c1c;\">Legal Escalation — Account ${a.account_id}</h2>\n  <table style=\"width:100%; border-collapse: collapse; margin-top: 16px;\">\n    <tr><td style=\"padding:6px 0; font-weight:bold;\">Customer</td><td>${a.customer_name}</td></tr>\n    <tr><td style=\"padding:6px 0; font-weight:bold;\">Principal Balance</td><td>₦${Number(a.principal_balance).toLocaleString()}</td></tr>\n    <tr><td style=\"padding:6px 0; font-weight:bold;\">Days Past Due</td><td>${a.days_past_due}</td></tr>\n    <tr><td style=\"padding:6px 0; font-weight:bold;\">Last Payment</td><td>${a.last_payment_date} (₦${Number(a.last_payment_amount).toLocaleString()})</td></tr>\n    <tr><td style=\"padding:6px 0; font-weight:bold;\">Sentiment Score</td><td>${a.sentiment_score}</td></tr>\n  </table>\n  <p style=\"margin-top:20px;\"><strong>Case Summary:</strong> ${a.rationale}</p>\n  <p style=\"margin-top:24px; font-size: 13px; color: #555;\">Referral generated ${new Date().toLocaleDateString()} — for legal/collections review and next-step determination.</p>\n</div>`;\n\nreturn { json: { ...a, legal_package, html_report } };"
+      },
+      "id": "af151ba9-d101-430a-a3ff-e38980bf66ae",
+      "name": "Compile Legal Package",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -656,
+        1168
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "=legal-team@example.com\n",
+        "subject": "=Legal Referral - Account {{ $json.account_id }}",
+        "message": "={{ $json.html_report }}",
+        "options": {
+          "appendAttribution": true
+        }
+      },
+      "id": "4f3fb430-00e6-47cb-b5b3-065cf13026a0",
+      "name": "Send Legal Referral",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        -416,
+        1168
+      ],
+      "webhookId": "992f14fd-8bab-490e-b0c2-67725678cc02",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "SxELyzs5iask0ZRA",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "schema": {
+          "__rl": true,
+          "value": "public",
+          "mode": "list",
+          "cachedResultName": "public"
+        },
+        "table": {
+          "__rl": true,
+          "value": "execution_log",
+          "mode": "list",
+          "cachedResultName": "execution_log"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "account_id": "={{ $json.account_id }}",
+            "sentiment_score": "={{ $json.sentiment_score }}",
+            "confidence": "={{ $json.confidence }}",
+            "risk_tier": "={{ $json.risk_tier }}",
+            "rationale": "={{ $json.rationale }}",
+            "action_taken": "={{ $json.action_taken }}",
+            "status": "={{ $json.message_reference }}",
+            "channel": "={{ $json.channel }}",
+            "message_reference": "={{ $json.message_reference }}",
+            "execution_id": "={{ $json.execution_id }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "log_id",
+              "displayName": "log_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "account_id",
+              "displayName": "account_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "risk_tier",
+              "displayName": "risk_tier",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "sentiment_score",
+              "displayName": "sentiment_score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "confidence",
+              "displayName": "confidence",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "rationale",
+              "displayName": "rationale",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "action_taken",
+              "displayName": "action_taken",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "channel",
+              "displayName": "channel",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "message_reference",
+              "displayName": "message_reference",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "run_at",
+              "displayName": "run_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "execution_id",
+              "displayName": "execution_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "4b817b3c-cecd-41b2-b299-ad751f99c42c",
+      "name": "Log Execution",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        16,
+        960
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "QuplFtruVN7sax0G",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-3.5-flash-lite",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1.1,
+      "position": [
+        -1632,
+        1248
+      ],
+      "id": "8eb8bc85-6e1d-4b20-a7ba-7f4eeb711e2a",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "xniG1WSCDhW2p4q3",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "92eb89cd-7c18-454f-a4bc-1511ad821ef2",
+      "name": "Loop Accounts",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -1872,
+        1008
+      ],
+      "executeOnce": false,
+      "retryOnFail": false
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT a.account_id, a.customer_name, a.phone_number, a.email, a.principal_balance, \n       a.days_past_due, a.loan_product, a.last_payment_date, a.last_payment_amount, \n       i.message_history\nFROM accounts a\nLEFT JOIN interactions i ON i.account_id = a.account_id\nWHERE a.status = 'delinquent'\n  AND a.days_past_due > 0\n  AND (a.last_contacted_date IS NULL OR a.last_contacted_date < CURRENT_DATE)\nORDER BY a.days_past_due DESC;",
+        "options": {}
+      },
+      "id": "1f9eeafd-0dbe-4d1c-809e-96841a54713f",
+      "name": "Fetch Delinquent Accounts",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        -2112,
+        1008
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "QuplFtruVN7sax0G",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const original = { ...$('Parse AI Output').item.json };\noriginal.rationale = (original.rationale || '').replace(/,/g, ';');\n\nlet reference = null;\nlet channel = null;\n\ntry {\n  reference = $('SMS Reminder').item.json.sid;\n  channel = 'sms';\n} catch (e) {}\n\ntry {\n  reference = $('Restructuring Offer').item.json.messages[0].id;\n  channel = 'whatsapp';\n} catch (e) {}\n\ntry {\n  reference = $('Send Legal Referral').item.json.id;\n  channel = 'email_legal';\n} catch (e) {}\n\ntry {\n  $('Flag for Human Review').item.json.action_taken;\n  channel = channel || 'human_review';\n} catch (e) {}\n\nconst action_taken = channel === 'human_review' ? 'human_review_queue' : channel;\nconst status = channel === 'human_review' ? 'pending_review' : 'sent';\n\nconst execution_id =\n`COL-${new Date().toISOString().slice(0,10).replace(/-/g,'')}-${original.account_id}-${Math.random().toString(36).substring(2,6).toUpperCase()}`\n\nreturn {\n  json: {\n    ...original,\n    execution_id,\n    message_reference: reference,\n    channel: channel || 'unknown',\n    action_taken,\n    status\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -208,
+        960
+      ],
+      "id": "2151d98e-5376-4f66-ab94-10aa02bc66ea",
+      "name": "Prepare Log Data"
+    },
+    {
+      "parameters": {
+        "operation": "send",
+        "phoneNumberId": "=YOUR_WHATSAPP_PHONE_NUMBER_ID",
+        "recipientPhoneNumber": "={{ $json.phone_number }}",
+        "textBody": "=Hi {{ $json.customer_name }}, we'd like to help you get back on track with a flexible repayment plan. Reply YES to get started, or view your options: https://your-n8n-host.example.com/webhook/787ee745-2741-43db-a39a-876aaa7ee0f7/pay/{{ $json.account_id }}",
+        "additionalFields": {}
+      },
+      "id": "1757938a-af83-4444-992a-c0e78fdfc69c",
+      "name": "Restructuring Offer",
+      "type": "n8n-nodes-base.whatsApp",
+      "typeVersion": 1,
+      "position": [
+        -656,
+        960
+      ],
+      "webhookId": "96844baa-04d8-4c17-bcfe-5b442c63b3f8",
+      "credentials": {
+        "whatsAppApi": {
+          "id": "2LxX2VSresi7mriJ",
+          "name": "WhatsApp account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "from": "=YOUR_TWILIO_NUMBER",
+        "to": "={{ $json.phone_number }}",
+        "message": "=Hi {{ $json.customer_name }}, your loan payment of ₦{{ $json.principal_balance }} is currently past due. Settle it securely here: https://your-n8n-host.example.com/webhook/787ee745-2741-43db-a39a-876aaa7ee0f7/pay/{{ $json.account_id }}",
+        "options": {}
+      },
+      "id": "2dfd0cfc-5a45-4a2b-888f-a794112f5924",
+      "name": "SMS Reminder",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        -656,
+        752
+      ],
+      "credentials": {
+        "twilioApi": {
+          "id": "OWdo2EWULosJC0lW",
+          "name": "Twilio account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "schema": {
+          "__rl": true,
+          "value": "public",
+          "mode": "list",
+          "cachedResultName": "public"
+        },
+        "table": {
+          "__rl": true,
+          "value": "accounts",
+          "mode": "list",
+          "cachedResultName": "accounts"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "account_id": "={{ $json.account_id }}",
+            "last_contacted_date": "={{ $now.toISO() }}"
+          },
+          "matchingColumns": [
+            "account_id"
+          ],
+          "schema": [
+            {
+              "id": "account_id",
+              "displayName": "account_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "customer_name",
+              "displayName": "customer_name",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "phone_number",
+              "displayName": "phone_number",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "email",
+              "displayName": "email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "principal_balance",
+              "displayName": "principal_balance",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "days_past_due",
+              "displayName": "days_past_due",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "loan_product",
+              "displayName": "loan_product",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "last_payment_date",
+              "displayName": "last_payment_date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "last_payment_amount",
+              "displayName": "last_payment_amount",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "last_contacted_date",
+              "displayName": "last_contacted_date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        192,
+        960
+      ],
+      "id": "3e30d16a-1163-48bd-a104-0e56560b4db2",
+      "name": "Mark Account Contacted",
+      "credentials": {
+        "postgres": {
+          "id": "QuplFtruVN7sax0G",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n    COUNT(*) AS accounts_processed,\n\n    COUNT(*) FILTER (\n        WHERE risk_tier = 'low'\n    ) AS low_count,\n\n    COUNT(*) FILTER (\n        WHERE risk_tier = 'medium'\n    ) AS medium_count,\n\n    COUNT(*) FILTER (\n        WHERE risk_tier = 'high'\n    ) AS high_count,\n\n    COUNT(*) FILTER (\n        WHERE channel = 'sms'\n    ) AS sms_sent,\n\n    COUNT(*) FILTER (\n        WHERE channel = 'whatsapp'\n    ) AS whatsapp_sent,\n\n    COUNT(*) FILTER (\n        WHERE channel = 'email_legal'\n    ) AS legal_referrals,\n\n    COUNT(*) FILTER (\n        WHERE action_taken = 'human_review_queue'\n    ) AS human_reviews,\n\n    COUNT(*) FILTER (\n        WHERE status = 'sent'\n    ) AS successful_actions,\n\n    COUNT(*) FILTER (\n        WHERE status = 'pending_review'\n    ) AS pending_reviews,\n\n    ROUND(AVG(confidence),2) AS avg_confidence\n\nFROM execution_log\n\nWHERE DATE(run_at) = CURRENT_DATE;",
+        "options": {}
+      },
+      "id": "986896a5-724a-4caa-8115-4a6b9f257567",
+      "name": "Fetch Daily Stats",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        -1616,
+        768
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "QuplFtruVN7sax0G",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const s = $json;\nconst summary = `Daily Collections Run — ${new Date().toLocaleDateString()}\n\nAccounts processed: ${s.accounts_processed}\n  Low risk: ${s.low_count}\n  Medium risk: ${s.medium_count}\n  High risk: ${s.high_count}\n\nlegal referrals: ${s.legal_referrals}\nHuman review queue: ${s.human_reviews}\n\nSMS sent: ${s.sms_sent}\nWhatsApp sent: ${s.whatsapp_sent}\n\nAverage AI confidence: ${s.avg_confidence}`;\n\nreturn { json: { summary } };"
+      },
+      "id": "b31a4fab-65d4-4872-ae0d-bba689913532",
+      "name": "Format Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1424,
+        768
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "seconds",
+              "secondsInterval": 1
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        -2352,
+        1008
+      ],
+      "id": "73ced3ee-62e4-454b-9735-155c4795ce30",
+      "name": "Daily Trigger"
+    },
+    {
+      "parameters": {
+        "sendTo": "=staff@example.com",
+        "subject": "=Daily Collections Run Summary",
+        "emailType": "text",
+        "message": "=={{ $json.summary }}",
+        "options": {
+          "appendAttribution": true
+        }
+      },
+      "id": "ba9952d1-c4b0-4e8d-9ee4-15cf37f7a866",
+      "name": "Send Summary Report",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        -1248,
+        768
+      ],
+      "webhookId": "992f14fd-8bab-490e-b0c2-67725678cc02",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "SxELyzs5iask0ZRA",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "{\n  \"risk_tier\": \"low\",\n  \"sentiment_score\": 0.8,\n  \"confidence\": 0.9,\n  \"rationale\": \"The customer is only slightly past due with a recent substantial payment and no negative communication.\"\n}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        -1488,
+        1248
+      ],
+      "id": "21d6fa3b-4241-4b32-b22d-1f1eaa39b590",
+      "name": "Structured Output Parser"
+    },
+    {
+      "parameters": {
+        "path": "pay/:account_id",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "3447baa3-3bfc-4d86-9af1-bc67b1f2ef4a",
+      "name": "Show Payment Page",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        128,
+        1728
+      ],
+      "webhookId": "787ee745-2741-43db-a39a-876aaa7ee0f7"
+    },
+    {
+      "parameters": {
+        "operation": "select",
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "list",
+          "value": "accounts"
+        },
+        "where": {
+          "values": [
+            {
+              "column": "account_id",
+              "value": "={{ $json.params.account_id }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "6467b1d7-5644-45f4-ab0c-4b657345469f",
+      "name": "Fetch Account",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        352,
+        1728
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "QuplFtruVN7sax0G",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const a = $json;\nconst html = `\n<!DOCTYPE html>\n<html>\n<head><meta charset=\"utf-8\"><title>Complete Your Payment</title>\n<style>\nbody{font-family:Georgia,serif;background:#F7F8FA;margin:0;padding:40px;color:#1B1F27;}\n.card{max-width:480px;margin:0 auto;background:#fff;border-radius:12px;padding:32px;box-shadow:0 4px 20px rgba(0,0,0,0.08);}\nh1{font-size:20px;color:#16223F;margin-top:0;}\n.row{display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #E4E7EC;font-size:14px;}\n.label{color:#5B6472;}\n.amount{font-size:28px;font-weight:bold;color:#16223F;margin:20px 0;}\nbutton{width:100%;padding:14px;background:#2F6FED;color:#fff;border:none;border-radius:8px;font-size:16px;cursor:pointer;font-family:Georgia,serif;}\nbutton:hover{background:#2159c9;}\n.note{font-size:12px;color:#5B6472;margin-top:16px;text-align:center;}\n</style></head>\n<body>\n<div class=\"card\">\n<h1>Hi ${a.customer_name}, let's settle your balance</h1>\n<div class=\"row\"><span class=\"label\">Loan product</span><span>${a.loan_product}</span></div>\n<div class=\"row\"><span class=\"label\">Days past due</span><span>${a.days_past_due}</span></div>\n<div class=\"row\"><span class=\"label\">Last payment</span><span>${a.last_payment_date || 'N/A'}</span></div>\n<div class=\"amount\">₦${Number(a.principal_balance).toLocaleString()}</div>\n<form method=\"POST\" action=\"/webhook/295bcc73-f09b-448f-83ec-90815c7f346d/pay-confirm/${a.account_id}\">\n<button type=\"submit\">Confirm Payment</button>\n</form>\n<p class=\"note\">This is a demo payment confirmation page. No real payment is processed.</p>\n</div>\n</body>\n</html>`;\nreturn { json: { html } };"
+      },
+      "id": "6e7e5eaa-cb31-4868-8498-0b8be54e1551",
+      "name": "Build Payment Page",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        576,
+        1728
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.html }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "text/html"
+              }
+            ]
+          }
+        }
+      },
+      "id": "623a874a-7aaa-4e46-9108-948f5295d491",
+      "name": "Respond With Page",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        800,
+        1728
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "pay-confirm/:account_id",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "d83362aa-908b-4225-bd51-41f3cee7738e",
+      "name": "Confirm Payment",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        144,
+        2032
+      ],
+      "webhookId": "295bcc73-f09b-448f-83ec-90815c7f346d"
+    },
+    {
+      "parameters": {
+        "operation": "select",
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "list",
+          "value": "accounts"
+        },
+        "where": {
+          "values": [
+            {
+              "column": "account_id",
+              "value": "={{ $json.params.account_id }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "f96183f3-3097-4c91-852a-2ac0ad9fcdf0",
+      "name": "Fetch Account For Payment",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        352,
+        2032
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "QuplFtruVN7sax0G",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "list",
+          "value": "accounts"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "account_id": "={{ $json.account_id }}",
+            "status": "paid",
+            "last_payment_date": "={{ $now.toISO() }}",
+            "last_payment_amount": "={{ $json.principal_balance }}"
+          },
+          "matchingColumns": [
+            "account_id"
+          ],
+          "schema": [
+            {
+              "id": "account_id",
+              "displayName": "account_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "customer_name",
+              "displayName": "customer_name",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "phone_number",
+              "displayName": "phone_number",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "email",
+              "displayName": "email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "principal_balance",
+              "displayName": "principal_balance",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "days_past_due",
+              "displayName": "days_past_due",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "loan_product",
+              "displayName": "loan_product",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "last_payment_date",
+              "displayName": "last_payment_date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "last_payment_amount",
+              "displayName": "last_payment_amount",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "last_contacted_date",
+              "displayName": "last_contacted_date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "d6b5f551-059c-4251-aec8-737091ecfd96",
+      "name": "Clear Delinquent Status",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        576,
+        2032
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "QuplFtruVN7sax0G",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "list",
+          "value": "execution_log"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "account_id": "={{ $json.account_id }}",
+            "risk_tier": "resolved",
+            "sentiment_score": 1,
+            "confidence": 1,
+            "rationale": "Customer confirmed payment via the payment portal.",
+            "action_taken": "payment_confirmed",
+            "status": "sent",
+            "channel": "payment_portal",
+            "message_reference": "={{ 'PAY-' + $json.account_id + '-' + $now.toFormat('yyyyLLdd') }}",
+            "execution_id": "={{ 'COL-' + $now.toFormat('yyyyLLdd') + '-' + $json.account_id + '-PAID' }}",
+            "log_id": 0
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "log_id",
+              "displayName": "log_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "account_id",
+              "displayName": "account_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "risk_tier",
+              "displayName": "risk_tier",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "sentiment_score",
+              "displayName": "sentiment_score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "confidence",
+              "displayName": "confidence",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "rationale",
+              "displayName": "rationale",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "action_taken",
+              "displayName": "action_taken",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "channel",
+              "displayName": "channel",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "message_reference",
+              "displayName": "message_reference",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "run_at",
+              "displayName": "run_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "execution_id",
+              "displayName": "execution_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "06ac34c7-f5e5-4b2f-9713-33a3c8494103",
+      "name": "Log Payment",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        800,
+        2032
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "QuplFtruVN7sax0G",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const html = `\n<!DOCTYPE html>\n<html>\n<head><meta charset=\"utf-8\"><title>Payment Confirmed</title>\n<style>\nbody{font-family:Georgia,serif;background:#F7F8FA;margin:0;padding:40px;color:#1B1F27;text-align:center;}\n.card{max-width:420px;margin:0 auto;background:#fff;border-radius:12px;padding:40px;box-shadow:0 4px 20px rgba(0,0,0,0.08);}\n.check{font-size:48px;color:#16A34A;}\nh1{font-size:20px;color:#16223F;}\np{color:#5B6472;font-size:14px;}\n</style></head>\n<body><div class=\"card\"><div class=\"check\">✓</div><h1>Payment confirmed</h1><p>Thank you — your account has been marked as paid and removed from the delinquent list.</p></div></body></html>`;\nreturn { json: { html } };"
+      },
+      "id": "e4963e5d-ada6-4bf7-a77a-4d8b45af7484",
+      "name": "Build Thank You Page",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1024,
+        2032
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.html }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "text/html"
+              }
+            ]
+          }
+        }
+      },
+      "id": "347168f0-8a6f-468a-ac54-296bc49328fd",
+      "name": "Respond With Confirmation",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1248,
+        2032
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Risk & Sentiment Agent": {
+      "main": [
+        [
+          {
+            "node": "Parse AI Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse AI Output": {
+      "main": [
+        [
+          {
+            "node": "Confidence Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Confidence Check": {
+      "main": [
+        [
+          {
+            "node": "Route by Risk Tier",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Flag for Human Review",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Flag for Human Review": {
+      "main": [
+        [
+          {
+            "node": "Prepare Log Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route by Risk Tier": {
+      "main": [
+        [
+          {
+            "node": "SMS Reminder",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Restructuring Offer",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Compile Legal Package",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Flag for Human Review",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compile Legal Package": {
+      "main": [
+        [
+          {
+            "node": "Send Legal Referral",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Legal Referral": {
+      "main": [
+        [
+          {
+            "node": "Prepare Log Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Execution": {
+      "main": [
+        [
+          {
+            "node": "Mark Account Contacted",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Risk & Sentiment Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Accounts": {
+      "main": [
+        [
+          {
+            "node": "Fetch Daily Stats",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Risk & Sentiment Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Delinquent Accounts": {
+      "main": [
+        [
+          {
+            "node": "Loop Accounts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Log Data": {
+      "main": [
+        [
+          {
+            "node": "Log Execution",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Restructuring Offer": {
+      "main": [
+        [
+          {
+            "node": "Prepare Log Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SMS Reminder": {
+      "main": [
+        [
+          {
+            "node": "Prepare Log Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Account Contacted": {
+      "main": [
+        [
+          {
+            "node": "Loop Accounts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Daily Stats": {
+      "main": [
+        [
+          {
+            "node": "Format Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Summary": {
+      "main": [
+        [
+          {
+            "node": "Send Summary Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Daily Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch Delinquent Accounts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Risk & Sentiment Agent",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Show Payment Page": {
+      "main": [
+        [
+          {
+            "node": "Fetch Account",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Account": {
+      "main": [
+        [
+          {
+            "node": "Build Payment Page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Payment Page": {
+      "main": [
+        [
+          {
+            "node": "Respond With Page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Confirm Payment": {
+      "main": [
+        [
+          {
+            "node": "Fetch Account For Payment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Account For Payment": {
+      "main": [
+        [
+          {
+            "node": "Clear Delinquent Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clear Delinquent Status": {
+      "main": [
+        [
+          {
+            "node": "Log Payment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Payment": {
+      "main": [
+        [
+          {
+            "node": "Build Thank You Page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Thank You Page": {
+      "main": [
+        [
+          {
+            "node": "Respond With Confirmation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false,
+    "errorWorkflow": "qpJfbCXJl34IR3Z2"
+  },
+  "versionId": "2e274341-1744-4978-8e3c-fd0cb6f25b85",
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "nodeGroups": [],
+  "id": "BNS6tRK5sia6u9rM",
+  "tags": []
+}
