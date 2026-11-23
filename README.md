@@ -56,4 +56,16 @@ Schedule Trigger (summary) ─▶ Fetch Daily Stats ─▶ Format Summary ─▶
 5. Set the workflow's error workflow (referenced in the workflow settings) or point it at your own.
 6. Activate the workflow. The two webhook nodes (`Show Payment Page`, `Confirm Payment`) will expose public URLs once active — use n8n's own base URL, or place a reverse proxy in front for a custom domain.
 
+### Placeholders to fill in after import
+
+Personal and environment-specific values were replaced before publishing:
+
+| Placeholder | Where | Replace with |
+| --- | --- | --- |
+| `your-n8n-host.example.com` | SMS Reminder, Restructuring Offer | Your n8n's public host (or tunnel) |
+| `YOUR_TWILIO_NUMBER` | SMS Reminder | Your Twilio sender number |
+| `YOUR_WHATSAPP_PHONE_NUMBER_ID` | Restructuring Offer | Your WhatsApp Business phone number ID |
+| `legal-team@example.com` | Send Legal Referral | The legal team's inbox |
+| `staff@example.com` | Send Summary Report | The staff inbox for the daily summary |
+
 See `PRODUCTION.md` for an honest breakdown of what's production-hardened today vs. what's still designed-only or not addressed.

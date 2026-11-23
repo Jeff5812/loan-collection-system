@@ -246,7 +246,7 @@
             "risk_tier": "={{ $json.risk_tier }}",
             "rationale": "={{ $json.rationale }}",
             "action_taken": "={{ $json.action_taken }}",
-            "status": "={{ $json.message_reference }}",
+            "status": "={{ $json.status }}",
             "channel": "={{ $json.channel }}",
             "message_reference": "={{ $json.message_reference }}",
             "execution_id": "={{ $json.execution_id }}"
@@ -694,8 +694,8 @@
         "rule": {
           "interval": [
             {
-              "field": "seconds",
-              "secondsInterval": 1
+              "field": "days",
+              "triggerAtHour": 8
             }
           ]
         }
